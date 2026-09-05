@@ -238,6 +238,7 @@ impl Client {
         // and bypass the code-based logout/retry handling, leaving a stale-session
         // run dead with a confusing parse error. So only coerce `data` into T once
         // we know code == 0; otherwise keep the code/message so callers can react.
+        log::debug!("api {api:?} raw resp: {text}");
         let raw: Resp<Value> = serde_json::from_str(&text).with_context(|| {
             format!("failed to parse response envelope for api {api:?}: {text}")
         })?;
