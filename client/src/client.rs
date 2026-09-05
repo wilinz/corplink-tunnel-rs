@@ -1180,6 +1180,9 @@ impl Client {
         // the request went through instead of parsing a response body.
         let resp = req.send().await.context("logout request failed")?;
         log::info!("logout (current terminal) status: {}", resp.status());
+        // the saved session is dead now: persist that, so the next run logs in
+        // again instead of trying to reuse it and failing with "logout".
+        self.change_state(State::Init).await?;
         Ok(())
     }
 }

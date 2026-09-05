@@ -81,7 +81,17 @@ pub async fn connect(mut config: Config) -> Result<Session> {
     if c.need_login() {
         c.login().await.context("login failed")?;
     }
-    let wg = c.connect_vpn().await.context("connect_vpn failed")?;
+    let wg = match c.connect_vpn().await {
+        Ok(wg) => wg,
+        // The saved session died server-side (logged out elsewhere, expired):
+        // connect_vpn resets the state, so log in once more and retry.
+        Err(e) if e.to_string().contains("logout") => {
+            log::warn!("{e}; re-logging in");
+            c.login().await.context("re-login failed")?;
+            c.connect_vpn().await.context("connect_vpn failed after re-login")?
+        }
+        Err(e) => return Err(e.context("connect_vpn failed")),
+    };
     let tunnel = Tunnel::start(to_tunnel_conf(&wg)).await.context("failed to start tunnel")?;
 
     let (sd_tx, sd_rx) = oneshot::channel();
