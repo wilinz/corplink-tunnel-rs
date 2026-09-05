@@ -1,0 +1,33 @@
+[package]
+name = "corplink-tunnel"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Pure-Rust userspace WireGuard-over-TCP tunnel for the CorpLink/feilian variant, with a connect() API and a SOCKS5 server"
+repository = "https://github.com/wilinz/corplink-tunnel-rs"
+
+[lib]
+name = "corplink_tunnel"
+path = "src/lib.rs"
+
+[dependencies]
+boringtun = { path = "../vendor/boringtun" }
+x25519-dalek = "2"
+smoltcp = { version = "0.12", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "socket-tcp", "socket-udp"] }
+tokio = { version = "1", features = ["full"] }
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+tokio-native-tls = "0.3"
+native-tls = "0.2"
+
+[[bin]]
+name = "test-conn"
+path = "src/bin/test_conn.rs"
+
+[[bin]]
+name = "socks5d"
+path = "src/bin/socks5d.rs"
