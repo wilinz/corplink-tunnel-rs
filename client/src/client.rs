@@ -34,6 +34,8 @@ const USER_AGENT: &str = "CorpLink/201000 (GooglePixel; Android 10; en)";
 #[derive(Clone)]
 pub struct Client {
     conf: Config,
+    /// Where to persist cookies; `None` for an in-memory config.
+    cookie_file: Option<path::PathBuf>,
     cookie: Arc<CookieStoreMutex>,
     c: reqwest::Client,
     api_url: ApiUrl,
@@ -73,21 +75,23 @@ pub async fn get_company_url(code: &str) -> anyhow::Result<RespCompany> {
 
 impl Client {
     pub fn new(conf: Config) -> Result<Client> {
-        let f = conf.conf_file.clone().context("config file path missing")?;
         let interface_name = conf
             .interface_name
             .clone()
             .context("interface name missing in config")?;
-        let dir = match path::Path::new(&f).parent() {
-            Some(dir) => dir,
-            None => path::Path::new("."),
-        };
-        let cookie_file = dir.join(format!("{}_{}", interface_name, COOKIE_FILE_SUFFIX));
-        log::info!("cookie file is: {}", cookie_file.to_string_lossy());
+        // Cookies are persisted next to the config file. An in-memory config
+        // (library/pool usage) has no file, so cookies live in memory only.
+        let cookie_file = conf.conf_file.as_ref().map(|f| {
+            let dir = path::Path::new(f).parent().unwrap_or(path::Path::new("."));
+            dir.join(format!("{}_{}", interface_name, COOKIE_FILE_SUFFIX))
+        });
+        match &cookie_file {
+            Some(p) => log::info!("cookie file is: {}", p.to_string_lossy()),
+            None => log::info!("no config file: keeping cookies in memory"),
+        }
 
-        let mut cookie_store = {
-            let file = fs::File::open(&cookie_file).map(io::BufReader::new);
-            match file {
+        let mut cookie_store = match &cookie_file {
+            Some(cookie_file) => match fs::File::open(cookie_file).map(io::BufReader::new) {
                 Ok(file) => CookieStore::load_json_all(file).or_else(|e| {
                     bail!(
                         "failed to load cookie store from {}: {e}",
@@ -95,7 +99,8 @@ impl Client {
                     )
                 })?,
                 Err(_) => CookieStore::default(),
-            }
+            },
+            None => CookieStore::default(),
         };
         let has_expired = cookie_store.iter_any().any(|cookie| cookie.is_expired());
         if has_expired {
@@ -144,6 +149,7 @@ impl Client {
         let conf_bak = conf.clone();
         Ok(Client {
             conf,
+            cookie_file,
             cookie: Arc::clone(&cookie_store),
             c,
             api_url: ApiUrl::new(&conf_bak)?,
@@ -158,18 +164,18 @@ impl Client {
     }
 
     fn save_cookie(&self) -> Result<()> {
-        let interface_name = self
-            .conf
-            .interface_name
-            .as_ref()
-            .context("interface name missing in config")?;
+        // In-memory config (library/pool usage): nothing to persist.
+        let cookie_file = match &self.cookie_file {
+            Some(f) => f,
+            None => return Ok(()),
+        };
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create(true)
             .append(false)
-            .open(format!("{}_{}", interface_name, COOKIE_FILE_SUFFIX))
+            .open(cookie_file)
             .map(io::BufWriter::new)
-            .with_context(|| "failed to open cookie file for writing")?;
+            .with_context(|| format!("failed to open cookie file {} for writing", cookie_file.display()))?;
         let c = self
             .cookie
             .lock()
