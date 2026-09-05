@@ -172,7 +172,9 @@ impl Client {
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create(true)
-            .append(false)
+            // truncate: a shorter cookie set would otherwise leave the tail of the
+            // previous (longer) file behind, corrupting the last line.
+            .truncate(true)
             .open(cookie_file)
             .map(io::BufWriter::new)
             .with_context(|| format!("failed to open cookie file {} for writing", cookie_file.display()))?;
