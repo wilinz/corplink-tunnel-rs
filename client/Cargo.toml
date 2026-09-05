@@ -6,6 +6,10 @@ license = "MIT"
 description = "Self-contained pure-Rust CorpLink/feilian client: login + userspace WireGuard-over-TCP tunnel with a SOCKS5 proxy"
 repository = "https://github.com/wilinz/corplink-tunnel-rs"
 
+[lib]
+name = "corplink_client"
+path = "src/lib.rs"
+
 [[bin]]
 name = "corplink-client"
 path = "src/main.rs"

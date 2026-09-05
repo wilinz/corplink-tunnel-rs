@@ -108,53 +108,48 @@ impl Config {
             .with_context(|| format!("failed to parse config file {file}"))?;
 
         conf.conf_file = Some(file.to_string());
-        let mut update_conf = false;
-        if conf.interface_name.is_none() {
-            conf.interface_name = Some(DEFAULT_INTERFACE_NAME.to_string());
-            update_conf = true;
-        }
-        if conf.device_name.is_none() {
-            conf.device_name = Some(DEFAULT_DEVICE_NAME.to_string());
-            update_conf = true;
-        }
-        if conf.device_id.is_none() {
-            let device_name = conf
-                .device_name
-                .as_ref()
-                .context("device name missing when generating device id")?;
-            conf.device_id = Some(format!("{:x}", md5::compute(device_name)));
-            update_conf = true;
-        }
-        match &conf.private_key {
-            Some(private_key) => match conf.public_key {
-                Some(_) => {
-                    // both keys exist, do nothing
-                }
-                None => {
-                    // only private key exists, generate public from private
-                    let public_key = utils::gen_public_key_from_private(private_key)?;
-                    conf.public_key = Some(public_key);
-                    update_conf = true;
-                }
-            },
-            None => {
-                // no key exists, generate new
-                let (public_key, private_key) = utils::gen_wg_keypair();
-                (conf.public_key, conf.private_key) = (Some(public_key), Some(private_key));
-                update_conf = true;
-            }
-        }
-        if update_conf {
+        if conf.prepare()? {
             conf.save().await?;
         }
         Ok(conf)
     }
 
+    /// Fill in defaults (interface/device name, device id, WireGuard keypair).
+    /// Usable on an in-memory config (no file). Returns true if anything changed.
+    pub fn prepare(&mut self) -> Result<bool> {
+        let mut update_conf = false;
+        if self.interface_name.is_none() {
+            self.interface_name = Some(DEFAULT_INTERFACE_NAME.to_string());
+            update_conf = true;
+        }
+        if self.device_name.is_none() {
+            self.device_name = Some(DEFAULT_DEVICE_NAME.to_string());
+            update_conf = true;
+        }
+        if self.device_id.is_none() {
+            let device_name = self.device_name.as_ref().context("device name missing")?;
+            self.device_id = Some(format!("{:x}", md5::compute(device_name)));
+            update_conf = true;
+        }
+        match &self.private_key {
+            Some(private_key) => {
+                if self.public_key.is_none() {
+                    self.public_key = Some(utils::gen_public_key_from_private(private_key)?);
+                    update_conf = true;
+                }
+            }
+            None => {
+                let (public_key, private_key) = utils::gen_wg_keypair();
+                (self.public_key, self.private_key) = (Some(public_key), Some(private_key));
+                update_conf = true;
+            }
+        }
+        Ok(update_conf)
+    }
+
     pub async fn save(&self) -> Result<()> {
-        let file = self
-            .conf_file
-            .as_ref()
-            .context("config file path missing")?;
+        // In-memory config (e.g. library/pool usage): nothing to persist.
+        let file = match self.conf_file.as_ref() { Some(f) => f, None => return Ok(()) };
         let data = format!("{}", &self);
         fs::write(file, data)
             .await
