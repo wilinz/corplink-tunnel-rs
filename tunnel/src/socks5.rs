@@ -15,6 +15,17 @@ pub async fn serve(tun: Tunnel, listen: &str) -> Result<()> {
 pub async fn serve_auth(tun: Tunnel, listen: &str, auth: Option<(String, String)>) -> Result<()> {
     let l = TcpListener::bind(listen).await?;
     tracing::info!("socks5 listening on {listen}");
+    serve_on(tun, l, auth).await
+}
+
+/// Bind a SOCKS5 listener without serving yet (lets the caller read `local_addr()`,
+/// e.g. when binding an ephemeral port with "127.0.0.1:0").
+pub async fn bind(listen: &str) -> Result<TcpListener> {
+    Ok(TcpListener::bind(listen).await?)
+}
+
+/// Serve SOCKS5 on a pre-bound listener with optional auth.
+pub async fn serve_on(tun: Tunnel, l: TcpListener, auth: Option<(String, String)>) -> Result<()> {
     loop {
         let (cli, _) = l.accept().await?;
         let tun = tun.clone();
