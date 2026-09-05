@@ -1,8 +1,15 @@
 # corplink-tunnel-rs
 
-A **pure-Rust, userspace** WireGuard-over-TCP tunnel for the **CorpLink / feilian**
-WireGuard variant. No Go, no `libwg`, no CGO, no TUN device, no root — a single
-`cargo build`.
+A **fully self-contained, pure-Rust** CorpLink / feilian client. No Go, no
+`libwg`, no CGO, no TUN device, no root — a single `cargo build`.
+
+Two crates:
+
+- **`tunnel/`** (`corplink-tunnel`) — the userspace WireGuard-over-TCP datapath:
+  a `connect()` API returning `AsyncRead + AsyncWrite` streams, and a SOCKS5 server.
+- **`client/`** (`corplink-client`) — login (company lookup, password / 2FA, session
+  keepalive, terminal logout) that produces a `WgConf`, then brings up the tunnel and
+  exposes a local SOCKS5 proxy.
 
 It brings up a WireGuard session over the CorpLink TCP transport using
 [boringtun](https://github.com/cloudflare/boringtun) for the crypto and
@@ -37,7 +44,30 @@ Two protocol details make CorpLink differ from stock WireGuard, both handled her
    The vendored boringtun in `vendor/boringtun` recomputes `INITIAL_CHAIN_HASH`
    accordingly (see `vendor/boringtun/MODIFICATIONS.md`).
 
-## Usage
+## Quick start (self-contained client)
+
+```bash
+cargo run --release -p corplink-client -- config.json
+# then point any client at the SOCKS5 proxy from your config
+```
+
+`config.json`:
+
+```json
+{
+  "company_name": "<feilian company code>",
+  "username": "<user>",
+  "password": "<pass>",
+  "platform": "feilian_v1",
+  "device_id": "<stable id>",
+  "device_name": "corplink-client",
+  "socks5_listen": "127.0.0.1:1080",
+  "socks5_username": "u",
+  "socks5_password": "p"
+}
+```
+
+## Library usage (datapath only)
 
 You supply a `WgConf` (private/peer keys, endpoint, tunnel address, DNS, MTU),
 typically obtained from a CorpLink login handshake:
